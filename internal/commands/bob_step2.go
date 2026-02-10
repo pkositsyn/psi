@@ -1,11 +1,14 @@
 package commands
 
 import (
+	"context"
 	"fmt"
 	"os"
+	"sync"
 
 	"github.com/pkositsyn/psi/internal/crypto"
 	"github.com/pkositsyn/psi/internal/io"
+	"github.com/pkositsyn/psi/internal/progress"
 	"github.com/spf13/cobra"
 )
 
@@ -29,10 +32,6 @@ func init() {
 	BobStep2Cmd.Flags().StringVar(&bobStep2InputAliceEnc, "in-alice-enc", "alice_encrypted.tsv.gz", "Файл H(phone_a)^A от alice")
 	BobStep2Cmd.Flags().StringVar(&bobStep2InputBobEnc, "in-bob-enc", "bob_encrypted_a.tsv.gz", "Файл H(phone_b)^B^A от alice")
 	BobStep2Cmd.Flags().StringVar(&bobStep2Output, "output", "bob_final.tsv.gz", "Выходной файл b_user_id <-> H(phone_a)^A^B")
-	BobStep2Cmd.MarkFlagRequired("in-ecdh-key")
-	BobStep2Cmd.MarkFlagRequired("in-original")
-	BobStep2Cmd.MarkFlagRequired("in-alice-enc")
-	BobStep2Cmd.MarkFlagRequired("in-bob-enc")
 }
 
 func runBobStep2(cmd *cobra.Command, args []string) error {
@@ -183,6 +182,11 @@ func processAndMatch(keyB *crypto.ECDHKey, inputFile, outputFile string, bobEncM
 	}
 	defer writer.Close()
 
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	var wg sync.WaitGroup
+	progress.TrackProgress(ctx, &wg, "Прогресс обработки", reader)
+
 	count, matched, err := ProcessBobStep2(reader, writer, keyB, bobEncMap, originalData)
 	if err != nil {
 		return err
@@ -191,6 +195,9 @@ func processAndMatch(keyB *crypto.ECDHKey, inputFile, outputFile string, bobEncM
 	if err := writer.Close(); err != nil {
 		return err
 	}
+
+	cancel()
+	wg.Wait()
 
 	fmt.Fprintf(os.Stderr, "Обработано записей: %d, совпадений: %d\n", count, matched)
 	return nil

@@ -15,11 +15,15 @@ type memReadCloser struct {
 	*bytes.Reader
 }
 
+func (m *memReadCloser) Reset() {
+	m.Seek(0, io.SeekStart)
+}
+
 func (m *memReadCloser) Close() error {
 	return nil
 }
 
-func newMemReadCloser(data string) io.ReadCloser {
+func newMemReadCloser(data string) psio.ReadResetCloser {
 	return &memReadCloser{bytes.NewReader([]byte(data))}
 }
 

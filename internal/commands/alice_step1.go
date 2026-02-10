@@ -1,12 +1,14 @@
 package commands
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"sync"
 
 	"github.com/pkositsyn/psi/internal/crypto"
 	"github.com/pkositsyn/psi/internal/io"
+	"github.com/pkositsyn/psi/internal/progress"
 	"github.com/pkositsyn/psi/internal/validation"
 	"github.com/spf13/cobra"
 )
@@ -33,9 +35,6 @@ func init() {
 	AliceStep1Cmd.Flags().StringVar(&aliceStep1OutECDHKey, "out-ecdh-key", "alice_ecdh_key.txt", "Выходной файл с ECDH ключом A (приватный)")
 	AliceStep1Cmd.Flags().StringVar(&aliceStep1OutEncBob, "out-encrypted-bob", "bob_encrypted_a.tsv.gz", "Выходной файл H(phone_b)^B^A")
 	AliceStep1Cmd.Flags().StringVar(&aliceStep1OutEncAlice, "out-encrypted-alice", "alice_encrypted.tsv.gz", "Выходной файл a_user_id <-> H(phone_a)^A")
-	AliceStep1Cmd.MarkFlagRequired("in-hmac-key")
-	AliceStep1Cmd.MarkFlagRequired("in-encrypted")
-	AliceStep1Cmd.MarkFlagRequired("in-a_user_id")
 }
 
 func runAliceStep1(cmd *cobra.Command, args []string) error {
@@ -53,21 +52,47 @@ func runAliceStep1(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("ошибка сохранения ECDH ключа A: %w", err)
 	}
 
+	bobReader, err := io.OpenTSVFile(aliceStep1InputEnc)
+	if err != nil {
+		return err
+	}
+	defer bobReader.Close()
+
+	bobWriter, err := io.CreateTSVFile(aliceStep1OutEncBob)
+	if err != nil {
+		return err
+	}
+	defer bobWriter.Close()
+
+	aliceReader, err := io.OpenTSVFile(aliceStep1InputPuid)
+	if err != nil {
+		return err
+	}
+	defer aliceReader.Close()
+
+	aliceWriter, err := io.CreateTSVFile(aliceStep1OutEncAlice)
+	if err != nil {
+		return err
+	}
+	defer aliceWriter.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	var wg sync.WaitGroup
+	progress.TrackProgress(ctx, &wg, "Прогресс обработки", aliceReader, bobReader)
+
 	errChan := make(chan error, 2)
 
-	wg.Add(2)
-	go func() {
-		defer wg.Done()
-		errChan <- processBobData(keyA, aliceStep1InputEnc, aliceStep1OutEncBob)
-	}()
+	wg.Go(func() {
+		errChan <- ProcessBobDataStep1(bobReader, bobWriter, keyA)
+	})
+
+	wg.Go(func() {
+		errChan <- ProcessAliceDataStep1(aliceReader, aliceWriter, keyK, keyA)
+	})
 
 	go func() {
-		defer wg.Done()
-		errChan <- processAliceData(keyK, keyA, aliceStep1InputPuid, aliceStep1OutEncAlice)
-	}()
-
-	go func() {
+		cancel()
 		wg.Wait()
 		close(errChan)
 	}()
@@ -85,19 +110,18 @@ func runAliceStep1(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func ProcessBobDataStep1(reader *io.TSVReader, writer *io.TSVWriter, keyA *crypto.ECDHKey) (int, error) {
-	count := 0
+func ProcessBobDataStep1(reader *io.TSVReader, writer *io.TSVWriter, keyA *crypto.ECDHKey) error {
 	for {
 		record, err := reader.Read()
 		if err == io.EOF {
 			break
 		}
 		if err != nil {
-			return count, err
+			return err
 		}
 
 		if len(record) < 2 {
-			return count, fmt.Errorf("неверный формат записи")
+			return fmt.Errorf("неверный формат записи")
 		}
 
 		index := record[0]
@@ -105,72 +129,44 @@ func ProcessBobDataStep1(reader *io.TSVReader, writer *io.TSVWriter, keyA *crypt
 
 		encryptedBA, err := crypto.ECDHApply(keyA, encryptedB)
 		if err != nil {
-			return count, err
+			return err
 		}
 
 		if err := writer.Write([]string{index, encryptedBA}); err != nil {
-			return count, err
+			return err
 		}
-
-		count++
 	}
 
-	return count, nil
-}
-
-func processBobData(keyA *crypto.ECDHKey, inputFile, outputFile string) error {
-	reader, err := io.OpenTSVFile(inputFile)
-	if err != nil {
-		return err
-	}
-	defer reader.Close()
-
-	writer, err := io.CreateTSVFile(outputFile)
-	if err != nil {
-		return err
-	}
-	defer writer.Close()
-
-	count, err := ProcessBobDataStep1(reader, writer, keyA)
-	if err != nil {
-		return err
-	}
-
-	if err := writer.Close(); err != nil {
-		return err
-	}
-
-	fmt.Fprintf(os.Stderr, "Обработано записей от bob: %d\n", count)
 	return nil
 }
 
-func ProcessAliceDataStep1(reader *io.TSVReader, writer *io.TSVWriter, keyK []byte, keyA *crypto.ECDHKey) (int, error) {
-	count := 0
+func ProcessAliceDataStep1(reader *io.TSVReader, writer *io.TSVWriter, keyK []byte, keyA *crypto.ECDHKey) error {
+	var count int
 	for {
 		record, err := reader.Read()
 		if err == io.EOF {
 			break
 		}
 		if err != nil {
-			return count, err
+			return err
 		}
 
 		if len(record) != 2 {
-			return count, fmt.Errorf("неверный формат записи")
+			return fmt.Errorf("неверный формат записи")
 		}
 
 		phone := record[0]
 		a_user_id := record[1]
 
 		if err := validation.ValidateE164Phone(phone); err != nil {
-			return count, fmt.Errorf("строка %d: %w", count, err)
+			return fmt.Errorf("строка %d: %w", count, err)
 		}
 
 		hashed := crypto.HMAC(keyK, []byte(phone))
 
 		encrypted, err := crypto.ECDHApply(keyA, hashed)
 		if err != nil {
-			return count, err
+			return err
 		}
 
 		if err := writer.Write([]string{
@@ -178,37 +174,11 @@ func ProcessAliceDataStep1(reader *io.TSVReader, writer *io.TSVWriter, keyK []by
 			a_user_id,
 			encrypted,
 		}); err != nil {
-			return count, err
+			return err
 		}
 
 		count++
 	}
 
-	return count, nil
-}
-
-func processAliceData(keyK []byte, keyA *crypto.ECDHKey, inputFile, outputFile string) error {
-	reader, err := io.OpenTSVFile(inputFile)
-	if err != nil {
-		return err
-	}
-	defer reader.Close()
-
-	writer, err := io.CreateTSVFile(outputFile)
-	if err != nil {
-		return err
-	}
-	defer writer.Close()
-
-	count, err := ProcessAliceDataStep1(reader, writer, keyK, keyA)
-	if err != nil {
-		return err
-	}
-
-	if err := writer.Close(); err != nil {
-		return err
-	}
-
-	fmt.Fprintf(os.Stderr, "Обработано записей alice: %d\n", count)
 	return nil
 }

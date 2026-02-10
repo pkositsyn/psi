@@ -1,10 +1,13 @@
 package commands
 
 import (
+	"context"
 	"fmt"
 	"os"
+	"sync"
 
 	"github.com/pkositsyn/psi/internal/io"
+	"github.com/pkositsyn/psi/internal/progress"
 	"github.com/spf13/cobra"
 )
 
@@ -24,8 +27,6 @@ func init() {
 	AliceStep2Cmd.Flags().StringVar(&aliceStep2InputOriginal, "in-original", "alice_encrypted.tsv.gz", "Файл a_user_id <-> H(phone_a)^A из step1")
 	AliceStep2Cmd.Flags().StringVar(&aliceStep2InputBob, "in-bob", "bob_final.tsv.gz", "Файл b_user_id <-> H(phone_a)^A^B от bob")
 	AliceStep2Cmd.Flags().StringVar(&aliceStep2Output, "output", "alice_final.tsv.gz", "Выходной файл a_user_id <-> b_user_id")
-	AliceStep2Cmd.MarkFlagRequired("in-original")
-	AliceStep2Cmd.MarkFlagRequired("in-bob")
 }
 
 func runAliceStep2(cmd *cobra.Command, args []string) error {
@@ -134,6 +135,11 @@ func createFinalMapping(originalFile, outputFile string, bobData map[string]BobR
 	}
 	defer writer.Close()
 
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	var wg sync.WaitGroup
+	progress.TrackProgress(ctx, &wg, "Прогресс обработки", reader)
+
 	count, matched, err := ProcessAliceStep2(reader, writer, bobData)
 	if err != nil {
 		return err
@@ -142,6 +148,9 @@ func createFinalMapping(originalFile, outputFile string, bobData map[string]BobR
 	if err := writer.Close(); err != nil {
 		return err
 	}
+
+	cancel()
+	wg.Wait()
 
 	fmt.Fprintf(os.Stderr, "Обработано записей: %d, совпадений: %d\n", count, matched)
 	return nil

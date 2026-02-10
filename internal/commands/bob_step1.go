@@ -1,11 +1,14 @@
 package commands
 
 import (
+	"context"
 	"fmt"
 	"os"
+	"sync"
 
 	"github.com/pkositsyn/psi/internal/crypto"
 	"github.com/pkositsyn/psi/internal/io"
+	"github.com/pkositsyn/psi/internal/progress"
 	"github.com/pkositsyn/psi/internal/validation"
 	"github.com/spf13/cobra"
 )
@@ -28,7 +31,6 @@ func init() {
 	BobStep1Cmd.Flags().StringVar(&bobStep1OutHMACKey, "out-hmac-key", "bob_hmac_key.txt", "Выходной файл с HMAC ключом K (для передачи)")
 	BobStep1Cmd.Flags().StringVar(&bobStep1OutECDHKey, "out-ecdh-key", "bob_ecdh_key.txt", "Выходной файл с ECDH ключом B (приватный)")
 	BobStep1Cmd.Flags().StringVarP(&bobStep1OutEnc, "out-encrypted", "e", "bob_encrypted.tsv.gz", "Выходной файл с index и H(phone)^B (для передачи)")
-	BobStep1Cmd.MarkFlagRequired("input")
 }
 
 func runBobStep1(cmd *cobra.Command, args []string) error {
@@ -62,6 +64,11 @@ func runBobStep1(cmd *cobra.Command, args []string) error {
 	}
 	defer writer.Close()
 
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	var wg sync.WaitGroup
+	progress.TrackProgress(ctx, &wg, "Прогресс обработки", reader)
+
 	count, err := ProcessBobStep1(reader, writer, keyK, keyB)
 	if err != nil {
 		return err
@@ -70,6 +77,9 @@ func runBobStep1(cmd *cobra.Command, args []string) error {
 	if err := writer.Close(); err != nil {
 		return fmt.Errorf("ошибка финализации записи: %w", err)
 	}
+
+	cancel()
+	wg.Wait()
 
 	fmt.Fprintf(os.Stderr, "Обработано записей: %d\n", count)
 	fmt.Fprintf(os.Stderr, "HMAC ключ K (для передачи): %s\n", bobStep1OutHMACKey)

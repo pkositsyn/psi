@@ -7,16 +7,23 @@ import (
 	"io"
 	"os"
 	"strings"
+	"sync/atomic"
 )
 
 var EOF = io.EOF
 
-type TSVReader struct {
-	reader *csv.Reader
-	rc     io.ReadCloser
+type ReadResetCloser interface {
+	io.ReadCloser
+	Reset()
 }
 
-func NewTSVReader(rc io.ReadCloser) *TSVReader {
+type TSVReader struct {
+	reader *csv.Reader
+	lc     atomic.Int64
+	rc     ReadResetCloser
+}
+
+func NewTSVReader(rc ReadResetCloser) *TSVReader {
 	return &TSVReader{
 		reader: createCSVReader(rc),
 		rc:     rc,
@@ -29,7 +36,7 @@ func OpenTSVFile(filename string) (*TSVReader, error) {
 		return nil, err
 	}
 
-	var reader io.ReadCloser = file
+	var reader ReadResetCloser = &fileResetter{file}
 
 	if strings.HasSuffix(filename, ".gz") {
 		gzr, err := gzip.NewReader(file)
@@ -52,6 +59,11 @@ func (g *gzipReadCloser) Read(p []byte) (int, error) {
 	return g.gzipReader.Read(p)
 }
 
+func (g *gzipReadCloser) Reset() {
+	g.file.Seek(0, io.SeekStart)
+	g.gzipReader.Reset(g.file)
+}
+
 func (g *gzipReadCloser) Close() error {
 	g.gzipReader.Close()
 	return g.file.Close()
@@ -66,7 +78,22 @@ func createCSVReader(r io.Reader) *csv.Reader {
 }
 
 func (r *TSVReader) Read() ([]string, error) {
-	return r.reader.Read()
+	record, err := r.reader.Read()
+	if err != nil {
+		return nil, err
+	}
+	r.lc.Add(1)
+	return record, nil
+}
+
+func (r *TSVReader) LinesRead() int {
+	return int(r.lc.Load())
+}
+
+func (r *TSVReader) Reset() {
+	r.lc.Store(0)
+	r.rc.Reset()
+	r.reader = createCSVReader(r.rc)
 }
 
 func (r *TSVReader) Close() error {
@@ -99,6 +126,14 @@ func CreateTSVFile(filename string) (*TSVWriter, error) {
 	}
 
 	return NewTSVWriter(writer), nil
+}
+
+type fileResetter struct {
+	*os.File
+}
+
+func (f *fileResetter) Reset() {
+	f.Seek(0, io.SeekStart)
 }
 
 type gzipWriteCloser struct {
