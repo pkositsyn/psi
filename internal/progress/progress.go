@@ -3,6 +3,7 @@ package progress
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -28,7 +29,7 @@ func TrackProgress(ctx context.Context, wg *sync.WaitGroup, msg string, files ..
 			select {
 			case <-ctx.Done():
 				lineLen := len(fmt.Sprintf("\r%s: %d/%d", msg, curCounter, totalLines))
-				fmt.Printf("\r%s\r", strings.Repeat(" ", lineLen))
+				fmt.Fprintf(os.Stderr, "\r%s\r", strings.Repeat(" ", lineLen))
 				return
 			case <-time.After(time.Second):
 			}
@@ -40,7 +41,7 @@ func TrackProgress(ctx context.Context, wg *sync.WaitGroup, msg string, files ..
 				counters[i] = int(num)
 			}
 
-			fmt.Printf("\r%s: %d/%d", msg, curCounter, totalLines)
+			fmt.Fprintf(os.Stderr, "\r%s: %d/%d", msg, curCounter, totalLines)
 		}
 	})
 }
