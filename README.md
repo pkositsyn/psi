@@ -7,30 +7,25 @@
 ```mermaid
 sequenceDiagram
 
-participant A as Party A
-participant B as Party B
-participant C as Party C
+participant alice as Alice
+participant bob as Bob
 
-A->>A: Генерирует ключ K для H, ключ P
+bob->>bob: Генерирует ключ K для H, ключ B
 
-A->>B: K <br>[ ]H(phone_a)^P
+bob->>alice: K <br>[ ]H(phone_b)^B
 
-B->>C: K <br>[ ]H(phone_a)^P
-B->>C: Сегмент [ ]puid
+alice->>alice: Генерирует ключ A
+alice->>alice: По [ ]a_user_id получает [ ]phone_a, генерирует [ ]H(phone_a)^A
 
-C->>C: Генерирует ключ Y
-C->>C: По [ ]puid получает [ ]phone_c, генерирует [ ]H(phone_c)^Y
+alice->>bob: [ ]H(phone_a)^A <br>[ ]H(phone_b)^B^A
 
-C->>B: puid <-> H(phone_c)^Y <br>[ ]H(phone_a)^P^Y
-B->>A: [ ]H(phone_c)^Y <br>[ ]H(phone_a)^P^Y
+bob->>bob: Шифрует и сопоставляет пересечение
 
-A->>A: Шифрует и сопоставляет пересечение
+bob->>bob: Сопоставляет b_user_id <-> H(phone_b)^B <br><-> (по индексам датасетов) H(phone_b)^B^A
 
-A->>A: Сопоставляет user_id <-> H(phone_a)^P <br><-> (по индексам датасетов) H(phone_a)^P^Y
+bob->>alice: b_user_id <-> [ ]H(phone_a)^A^B <br>(b_user_id только по пересечению, иначе null)
 
-A->>B: user_id <-> [ ]H(phone_c)^Y^P <br>(user_id только по пересечению, иначе null)
-
-B->>B: На основании:<br> puid <-> H(phone_c)^Y^P (по индексам датасетов) <br> user_id <-> [ ]H(phone_a)^P^Y получаем puid <-> user_id
+alice->>alice: На основании:<br> a_user_id <-> H(phone_a)^A^B (по индексам датасетов) <br> b_user_id <-> [ ]H(phone_b)^B^A получаем a_user_id <-> b_user_id
 ```
 
 ## Криптография
@@ -43,123 +38,108 @@ B->>B: На основании:<br> puid <-> H(phone_c)^Y^P (по индекса
 
 Все файлы используют формат TSV (tab-separated values) со сжатием gzip.
 
-Бинарные данные кодируются в base64.
+Бинарные данные кодируются в hex (шестнадцатеричный формат).
 
 Формат телефонов: E.164 (например, +79991234567)
 
 ## Установка
 
 ```bash
-go mod download
-go build -o psi ./cmd/psi
+go install github.com/pkositsyn/psi/cmd/psi@latest
 ```
+
+После установки `psi` будет доступна из любой директории (если `$GOPATH/bin` или `$GOBIN` в `PATH`).
 
 ## Использование
 
-### Party A - Step 1
+### Bob - Step 1
 
 Генерация ключей и шифрование исходных данных.
 
 **Входные данные:**
-- Файл TSV: `phone \t user_id`
+- Файл `bob_data.tsv`: `phone \t b_user_id`
 
 **Команда:**
 ```bash
-./psi partner-step1 \
-  --input party_a_data.tsv \
-  --out-key party_a_key.txt \
-  --out-encrypted party_a_encrypted.tsv.gz
+psi bob-step1
 ```
 
 **Выходные данные:**
-- `party_a_key.txt` - ключи K и P
-- `party_a_encrypted.tsv.gz` - файл с полями: `index \t H(phone)^P \t user_id`
+- `bob_hmac_key.txt` - ключ K для HMAC (для передачи)
+- `bob_ecdh_key.txt` - ключ B для ECDH (приватный, не передавать!)
+- `bob_encrypted.tsv.gz` - файл с полями: `index \t H(phone)^B`
 
-**Передать Party B:**
-- `party_a_key.txt`
-- `party_a_encrypted.tsv.gz`
+**Передать Alice:**
+- `bob_hmac_key.txt`
+- `bob_encrypted.tsv.gz`
 
 ---
 
-### Party C - Step 1
+### Alice - Step 1
 
-Обработка данных от Party A и генерация своих зашифрованных данных.
+Обработка данных от Bob и генерация своих зашифрованных данных.
 
 **Входные данные:**
-- `party_a_key.txt` (от Party A)
-- `party_a_encrypted.tsv.gz` (от Party A)
-- Свой файл TSV: `puid \t phone`
+- `bob_hmac_key.txt` (от Bob)
+- `bob_encrypted.tsv.gz` (от Bob)
+- Свой файл `alice_data.tsv`: `phone \t a_user_id`
 
 **Команда:**
 ```bash
-./psi passport-step1 \
-  --in-key party_a_key.txt \
-  --in-encrypted party_a_encrypted.tsv.gz \
-  --in-puid party_c_data.tsv \
-  --out-key party_c_key.txt \
-  --out-encrypted-partner party_a_encrypted_y.tsv.gz \
-  --out-encrypted-passport party_c_encrypted.tsv.gz
+psi alice-step1
 ```
 
 **Выходные данные:**
-- `party_c_key.txt` - ключ Y
-- `party_a_encrypted_y.tsv.gz` - файл: `index \t H(phone_a)^P^Y`
-- `party_c_encrypted.tsv.gz` - файл: `index \t puid \t H(phone_c)^Y`
+- `alice_ecdh_key.txt` - ключ A для ECDH (приватный, не передавать!)
+- `bob_encrypted_a.tsv.gz` - файл: `index \t H(phone_b)^B^A`
+- `alice_encrypted.tsv.gz` - файл: `index \t a_user_id \t H(phone_a)^A`
 
-**Передать Party A (через Party B или напрямую):**
-- `party_a_encrypted_y.tsv.gz`
-- `party_c_encrypted.tsv.gz`
+**Передать Bob:**
+- `bob_encrypted_a.tsv.gz`
+- `alice_encrypted.tsv.gz`
 
 ---
 
-### Party A - Step 2
+### Bob - Step 2
 
 Вычисление пересечения и создание маппинга.
 
 **Входные данные:**
-- `party_a_key.txt` (свой из step 1)
-- `party_a_encrypted.tsv.gz` (свой из step 1)
-- `party_c_encrypted.tsv.gz` (от Party C)
-- `party_a_encrypted_y.tsv.gz` (от Party C)
+- `bob_ecdh_key.txt` (свой из step 1)
+- `bob_data.tsv` (оригинальный файл из step 1)
+- `alice_encrypted.tsv.gz` (от Alice)
+- `bob_encrypted_a.tsv.gz` (от Alice)
 
 **Команда:**
 ```bash
-./psi partner-step2 \
-  --in-key party_a_key.txt \
-  --in-original party_a_encrypted.tsv.gz \
-  --in-passport-enc party_c_encrypted.tsv.gz \
-  --in-partner-enc party_a_encrypted_y.tsv.gz \
-  --output party_a_final.tsv.gz
+psi bob-step2
 ```
 
 **Выходные данные:**
-- `party_a_final.tsv.gz` - файл: `index \t H(phone_c)^Y^P \t user_id`
-  - `user_id` пустой для записей без пересечения
+- `bob_final.tsv.gz` - файл: `index \t H(phone_a)^A^B \t b_user_id`
+  - `b_user_id` пустой для записей без пересечения
 
-**Передать Party B:**
-- `party_a_final.tsv.gz`
+**Передать Alice:**
+- `bob_final.tsv.gz`
 
 ---
 
-### Party C - Step 2
+### Alice - Step 2
 
-Создание финального маппинга puid <-> user_id.
+Создание финального маппинга a_user_id <-> b_user_id.
 
 **Входные данные:**
-- `party_c_encrypted.tsv.gz` (свой из step 1)
-- `party_a_final.tsv.gz` (от Party A)
+- `alice_encrypted.tsv.gz` (свой из step 1)
+- `bob_final.tsv.gz` (от Bob)
 
 **Команда:**
 ```bash
-./psi passport-step2 \
-  --in-original party_c_encrypted.tsv.gz \
-  --in-partner party_a_final.tsv.gz \
-  --output party_c_final.tsv.gz
+psi alice-step2
 ```
 
 **Выходные данные:**
-- `party_c_final.tsv.gz` - финальный маппинг: `puid \t user_id`
-  - `user_id` пустой для записей без пересечения
+- `alice_final.tsv.gz` - финальный маппинг: `a_user_id \t b_user_id`
+  - `b_user_id` пустой для записей без пересечения
 
 ---
 
@@ -168,71 +148,41 @@ go build -o psi ./cmd/psi
 Проверка корректности файлов данных:
 
 ```bash
-./psi validate --input файл.tsv.gz
+psi validate --input файл.tsv.gz
 ```
 
 ## Примеры
 
 ### Подготовка тестовых данных
 
-Party A:
+Bob:
 ```bash
-cat > party_a_data.tsv << EOF
-+79991234567	user_001
-+79991234568	user_002
-+79991234569	user_003
+cat > bob_data.tsv << EOF
++79991234567	b_user_001
++79991234568	b_user_002
++79991234569	b_user_003
 EOF
 ```
 
-Party C:
+Alice:
 ```bash
-cat > party_c_data.tsv << EOF
-puid_123	+79991234567
-puid_456	+79991234570
-puid_789	+79991234569
+cat > alice_data.tsv << EOF
++79991234567	a_user_id_123
++79991234570	a_user_id_456
++79991234569	a_user_id_789
 EOF
 ```
 
 ### Полный цикл
 
 ```bash
-./psi partner-step1 --input party_a_data.tsv
-./psi passport-step1 --in-key party_a_key.txt --in-encrypted party_a_encrypted.tsv.gz --in-puid party_c_data.tsv
-./psi partner-step2 --in-key party_a_key.txt --in-original party_a_encrypted.tsv.gz --in-passport-enc party_c_encrypted.tsv.gz --in-partner-enc party_a_encrypted_y.tsv.gz
-./psi passport-step2 --in-original party_c_encrypted.tsv.gz --in-partner party_a_final.tsv.gz
+psi bob-step1
+psi alice-step1
+psi bob-step2
+psi alice-step2
 ```
 
-Результат: `party_c_final.tsv.gz` содержит маппинг puid <-> user_id для пересечения телефонов.
-
-## Архитектура
-
-```
-psi/
-├── cmd/
-│   ├── psi/
-│   │   └── main.go      # точка входа
-│   └── root.go          # корневая команда CLI
-└── internal/
-    ├── commands/        # логика CLI команд
-    │   ├── partner_step1.go
-    │   ├── partner_step2.go
-    │   ├── passport_step1.go
-    │   ├── passport_step2.go
-    │   └── validate.go
-    ├── crypto/          # криптографические примитивы
-    │   ├── hmac.go      # HMAC-SHA256
-    │   ├── ecdh.go      # ECDH SECP256R1
-    │   └── keys.go      # управление ключами
-    └── io/              # потоковый ввод-вывод
-        └── tsv.go       # TSV + gzip reader/writer
-```
-
-## Особенности реализации
-
-- **Потоковая обработка**: файлы читаются и обрабатываются построчно без полной загрузки в память
-- **Автоматическое сжатие**: файлы с расширением `.gz` автоматически сжимаются/разжимаются
-- **Base64 кодирование**: все бинарные данные кодируются в base64 для безопасной передачи
-- **Индексация**: используется для сопоставления записей между файлами (iota-подобная нумерация)
+Результат: `alice_final.tsv.gz` содержит маппинг a_user_id <-> b_user_id для пересечения телефонов.
 
 ## Лицензия
 

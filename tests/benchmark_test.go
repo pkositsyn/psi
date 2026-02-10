@@ -14,7 +14,7 @@ func generateRandomPhone() string {
 	return fmt.Sprintf("+7999%07d", rand.Intn(10000000))
 }
 
-func generatePartnerData(n int) string {
+func generateBobData(n int) string {
 	result := ""
 	for i := 0; i < n; i++ {
 		result += fmt.Sprintf("%s\tuser_%06d\n", generateRandomPhone(), i)
@@ -22,7 +22,7 @@ func generatePartnerData(n int) string {
 	return result
 }
 
-func generatePassportData(n int) string {
+func generateAliceData(n int) string {
 	result := ""
 	for i := 0; i < n; i++ {
 		result += fmt.Sprintf("puid_%06d\t%s\n", i, generateRandomPhone())
@@ -30,22 +30,22 @@ func generatePassportData(n int) string {
 	return result
 }
 
-func BenchmarkPartnerStep1_100(b *testing.B) {
-	benchmarkPartnerStep1(b, 100)
+func BenchmarkBobStep1_100(b *testing.B) {
+	benchmarkBobStep1(b, 100)
 }
 
-func BenchmarkPartnerStep1_1000(b *testing.B) {
-	benchmarkPartnerStep1(b, 1000)
+func BenchmarkBobStep1_1000(b *testing.B) {
+	benchmarkBobStep1(b, 1000)
 }
 
-func BenchmarkPartnerStep1_10000(b *testing.B) {
-	benchmarkPartnerStep1(b, 10000)
+func BenchmarkBobStep1_10000(b *testing.B) {
+	benchmarkBobStep1(b, 10000)
 }
 
-func benchmarkPartnerStep1(b *testing.B, n int) {
-	input := generatePartnerData(n)
+func benchmarkBobStep1(b *testing.B, n int) {
+	input := generateBobData(n)
 	keyK, _ := crypto.GenerateHMACKey()
-	keyP, _ := crypto.GenerateECDHKey()
+	keyB, _ := crypto.GenerateECDHKey()
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -53,164 +53,164 @@ func benchmarkPartnerStep1(b *testing.B, n int) {
 		output := newMemWriteCloser()
 		writer := psio.NewTSVWriter(output)
 
-		commands.ProcessPartnerStep1(reader, writer, keyK, keyP)
+		commands.ProcessBobStep1(reader, writer, keyK, keyB)
 
 		writer.Close()
 		reader.Close()
 	}
 }
 
-func BenchmarkPassportStep1Partner_100(b *testing.B) {
-	benchmarkPassportStep1Partner(b, 100)
+func BenchmarkAliceStep1Bob_100(b *testing.B) {
+	benchmarkAliceStep1Bob(b, 100)
 }
 
-func BenchmarkPassportStep1Partner_1000(b *testing.B) {
-	benchmarkPassportStep1Partner(b, 1000)
+func BenchmarkAliceStep1Bob_1000(b *testing.B) {
+	benchmarkAliceStep1Bob(b, 1000)
 }
 
-func BenchmarkPassportStep1Partner_10000(b *testing.B) {
-	benchmarkPassportStep1Partner(b, 10000)
+func BenchmarkAliceStep1Bob_10000(b *testing.B) {
+	benchmarkAliceStep1Bob(b, 10000)
 }
 
-func benchmarkPassportStep1Partner(b *testing.B, n int) {
-	partnerInput := generatePartnerData(n)
+func benchmarkAliceStep1Bob(b *testing.B, n int) {
+	bobInput := generateBobData(n)
 
 	keyK, _ := crypto.GenerateHMACKey()
-	keyP, _ := crypto.GenerateECDHKey()
-	keyY, _ := crypto.GenerateECDHKey()
+	keyB, _ := crypto.GenerateECDHKey()
+	keyA, _ := crypto.GenerateECDHKey()
 
-	partnerEncrypted := partnerStep1(keyK, keyP, partnerInput)
+	bobEncrypted := partnerStep1(keyK, keyB, bobInput)
 
 	b.ResetTimer()
 	for b.Loop() {
-		readerPartner := psio.NewTSVReader(newMemReadCloser(partnerEncrypted))
+		readerPartner := psio.NewTSVReader(newMemReadCloser(bobEncrypted))
 		outputPartner := newMemWriteCloser()
 		writerPartner := psio.NewTSVWriter(outputPartner)
 
-		commands.ProcessPartnerDataStep1(readerPartner, writerPartner, keyY)
+		commands.ProcessBobDataStep1(readerPartner, writerPartner, keyA)
 
 		writerPartner.Close()
 		readerPartner.Close()
 	}
 }
 
-func BenchmarkPassportStep1Passport_100(b *testing.B) {
-	benchmarkPassportStep1Passport(b, 100)
+func BenchmarkAliceStep1Alice_100(b *testing.B) {
+	benchmarkAliceStep1Alice(b, 100)
 }
 
-func BenchmarkPassportStep1Passport_1000(b *testing.B) {
-	benchmarkPassportStep1Passport(b, 1000)
+func BenchmarkAliceStep1Alice_1000(b *testing.B) {
+	benchmarkAliceStep1Alice(b, 1000)
 }
 
-func BenchmarkPassportStep1Passport_10000(b *testing.B) {
-	benchmarkPassportStep1Passport(b, 10000)
+func BenchmarkAliceStep1Alice_10000(b *testing.B) {
+	benchmarkAliceStep1Alice(b, 10000)
 }
 
-func benchmarkPassportStep1Passport(b *testing.B, n int) {
-	passportInput := generatePassportData(n)
+func benchmarkAliceStep1Alice(b *testing.B, n int) {
+	aliceInput := generateAliceData(n)
 
 	keyK, _ := crypto.GenerateHMACKey()
-	keyY, _ := crypto.GenerateECDHKey()
+	keyA, _ := crypto.GenerateECDHKey()
 
 	b.ResetTimer()
 	for b.Loop() {
-		readerPassport := psio.NewTSVReader(newMemReadCloser(passportInput))
+		readerPassport := psio.NewTSVReader(newMemReadCloser(aliceInput))
 		outputPassport := newMemWriteCloser()
 		writerPassport := psio.NewTSVWriter(outputPassport)
 
-		commands.ProcessPassportDataStep1(readerPassport, writerPassport, keyK, keyY)
+		commands.ProcessAliceDataStep1(readerPassport, writerPassport, keyK, keyA)
 
 		writerPassport.Close()
 		readerPassport.Close()
 	}
 }
 
-func BenchmarkPartnerStep2_100(b *testing.B) {
-	benchmarkPartnerStep2(b, 100)
+func BenchmarkBobStep2_100(b *testing.B) {
+	benchmarkBobStep2(b, 100)
 }
 
-func BenchmarkPartnerStep2_1000(b *testing.B) {
-	benchmarkPartnerStep2(b, 1000)
+func BenchmarkBobStep2_1000(b *testing.B) {
+	benchmarkBobStep2(b, 1000)
 }
 
-func BenchmarkPartnerStep2_10000(b *testing.B) {
-	benchmarkPartnerStep2(b, 10000)
+func BenchmarkBobStep2_10000(b *testing.B) {
+	benchmarkBobStep2(b, 10000)
 }
 
-func benchmarkPartnerStep2(b *testing.B, n int) {
-	partnerInput := generatePartnerData(n)
-	passportInput := generatePassportData(n)
+func benchmarkBobStep2(b *testing.B, n int) {
+	bobInput := generateBobData(n)
+	aliceInput := generateAliceData(n)
 
 	keyK, _ := crypto.GenerateHMACKey()
-	keyP, _ := crypto.GenerateECDHKey()
-	keyY, _ := crypto.GenerateECDHKey()
+	keyB, _ := crypto.GenerateECDHKey()
+	keyA, _ := crypto.GenerateECDHKey()
 
-	partnerStep1Output := partnerStep1(keyK, keyP, partnerInput)
-	partnerEncryptedY, passportEncrypted := passportStep1(keyK, keyY, partnerStep1Output, passportInput)
+	partnerStep1Output := partnerStep1(keyK, keyB, bobInput)
+	bobEncryptedY, aliceEncrypted := passportStep1(keyK, keyA, partnerStep1Output, aliceInput)
 
 	b.ResetTimer()
 	for b.Loop() {
-		readerPartnerEnc := psio.NewTSVReader(newMemReadCloser(partnerEncryptedY))
-		partnerEncMap, _ := commands.LoadIndexedData(readerPartnerEnc)
+		readerPartnerEnc := psio.NewTSVReader(newMemReadCloser(bobEncryptedY))
+		bobEncMap, _ := commands.LoadIndexedData(readerPartnerEnc)
 		readerPartnerEnc.Close()
 
-		readerOriginal := psio.NewTSVReader(newMemReadCloser(partnerInput))
+		readerOriginal := psio.NewTSVReader(newMemReadCloser(bobInput))
 		originalData, _ := commands.LoadOriginalData(readerOriginal)
 		readerOriginal.Close()
 
-		readerPassport := psio.NewTSVReader(newMemReadCloser(passportEncrypted))
+		readerPassport := psio.NewTSVReader(newMemReadCloser(aliceEncrypted))
 		output := newMemWriteCloser()
 		writer := psio.NewTSVWriter(output)
 
-		commands.ProcessPartnerStep2(readerPassport, writer, keyP, partnerEncMap, originalData)
+		commands.ProcessBobStep2(readerPassport, writer, keyB, bobEncMap, originalData)
 
 		writer.Close()
 		readerPassport.Close()
 	}
 }
 
-func BenchmarkPassportStep2_100(b *testing.B) {
-	benchmarkPassportStep2(b, 100)
+func BenchmarkAliceStep2_100(b *testing.B) {
+	benchmarkAliceStep2(b, 100)
 }
 
-func BenchmarkPassportStep2_1000(b *testing.B) {
-	benchmarkPassportStep2(b, 1000)
+func BenchmarkAliceStep2_1000(b *testing.B) {
+	benchmarkAliceStep2(b, 1000)
 }
 
-func BenchmarkPassportStep2_10000(b *testing.B) {
-	benchmarkPassportStep2(b, 10000)
+func BenchmarkAliceStep2_10000(b *testing.B) {
+	benchmarkAliceStep2(b, 10000)
 }
 
-func benchmarkPassportStep2(b *testing.B, n int) {
-	partnerInput := generatePartnerData(n)
-	passportInput := generatePassportData(n)
+func benchmarkAliceStep2(b *testing.B, n int) {
+	bobInput := generateBobData(n)
+	aliceInput := generateAliceData(n)
 
 	keyK, _ := crypto.GenerateHMACKey()
-	keyP, _ := crypto.GenerateECDHKey()
-	keyY, _ := crypto.GenerateECDHKey()
+	keyB, _ := crypto.GenerateECDHKey()
+	keyA, _ := crypto.GenerateECDHKey()
 
-	partnerStep1Output := partnerStep1(keyK, keyP, partnerInput)
-	partnerEncryptedY, passportEncrypted := passportStep1(keyK, keyY, partnerStep1Output, passportInput)
-	partnerFinal := partnerStep2(keyP, partnerInput, passportEncrypted, partnerEncryptedY)
+	partnerStep1Output := partnerStep1(keyK, keyB, bobInput)
+	bobEncryptedY, aliceEncrypted := passportStep1(keyK, keyA, partnerStep1Output, aliceInput)
+	bobFinal := partnerStep2(keyB, bobInput, aliceEncrypted, bobEncryptedY)
 
 	b.ResetTimer()
 	for b.Loop() {
-		readerPartner := psio.NewTSVReader(newMemReadCloser(partnerFinal))
-		partnerData, _ := commands.LoadPartnerFinalData(readerPartner)
+		readerPartner := psio.NewTSVReader(newMemReadCloser(bobFinal))
+		partnerData, _ := commands.LoadBobFinalData(readerPartner)
 		readerPartner.Close()
 
-		readerPassport := psio.NewTSVReader(newMemReadCloser(passportEncrypted))
+		readerPassport := psio.NewTSVReader(newMemReadCloser(aliceEncrypted))
 		output := newMemWriteCloser()
 		writer := psio.NewTSVWriter(output)
 
-		commands.ProcessPassportStep2(readerPassport, writer, partnerData)
+		commands.ProcessAliceStep2(readerPassport, writer, partnerData)
 
 		writer.Close()
 		readerPassport.Close()
 	}
 }
 
-func partnerStep1(keyK []byte, keyP *crypto.ECDHKey, input string) string {
+func partnerStep1(keyK []byte, keyB *crypto.ECDHKey, input string) string {
 	reader := psio.NewTSVReader(newMemReadCloser(input))
 	defer reader.Close()
 
@@ -218,53 +218,53 @@ func partnerStep1(keyK []byte, keyP *crypto.ECDHKey, input string) string {
 	writer := psio.NewTSVWriter(output)
 	defer writer.Close()
 
-	commands.ProcessPartnerStep1(reader, writer, keyK, keyP)
+	commands.ProcessBobStep1(reader, writer, keyK, keyB)
 
 	writer.Close()
 	return output.String()
 }
 
-func passportStep1(keyK []byte, keyY *crypto.ECDHKey, partnerEncrypted, passportInput string) (string, string) {
-	readerPartner := psio.NewTSVReader(newMemReadCloser(partnerEncrypted))
+func passportStep1(keyK []byte, keyA *crypto.ECDHKey, bobEncrypted, aliceInput string) (string, string) {
+	readerPartner := psio.NewTSVReader(newMemReadCloser(bobEncrypted))
 	defer readerPartner.Close()
 
 	outputPartner := newMemWriteCloser()
 	writerPartner := psio.NewTSVWriter(outputPartner)
 	defer writerPartner.Close()
 
-	commands.ProcessPartnerDataStep1(readerPartner, writerPartner, keyY)
+	commands.ProcessBobDataStep1(readerPartner, writerPartner, keyA)
 	writerPartner.Close()
 
-	readerPassport := psio.NewTSVReader(newMemReadCloser(passportInput))
+	readerPassport := psio.NewTSVReader(newMemReadCloser(aliceInput))
 	defer readerPassport.Close()
 
 	outputPassport := newMemWriteCloser()
 	writerPassport := psio.NewTSVWriter(outputPassport)
 	defer writerPassport.Close()
 
-	commands.ProcessPassportDataStep1(readerPassport, writerPassport, keyK, keyY)
+	commands.ProcessAliceDataStep1(readerPassport, writerPassport, keyK, keyA)
 	writerPassport.Close()
 
 	return outputPartner.String(), outputPassport.String()
 }
 
-func partnerStep2(keyP *crypto.ECDHKey, originalInput, passportEncrypted, partnerEncryptedY string) string {
-	readerPartnerEnc := psio.NewTSVReader(newMemReadCloser(partnerEncryptedY))
+func partnerStep2(keyB *crypto.ECDHKey, originalInput, aliceEncrypted, bobEncryptedY string) string {
+	readerPartnerEnc := psio.NewTSVReader(newMemReadCloser(bobEncryptedY))
 	defer readerPartnerEnc.Close()
-	partnerEncMap, _ := commands.LoadIndexedData(readerPartnerEnc)
+	bobEncMap, _ := commands.LoadIndexedData(readerPartnerEnc)
 
 	readerOriginal := psio.NewTSVReader(newMemReadCloser(originalInput))
 	defer readerOriginal.Close()
 	originalData, _ := commands.LoadOriginalData(readerOriginal)
 
-	readerPassport := psio.NewTSVReader(newMemReadCloser(passportEncrypted))
+	readerPassport := psio.NewTSVReader(newMemReadCloser(aliceEncrypted))
 	defer readerPassport.Close()
 
 	output := newMemWriteCloser()
 	writer := psio.NewTSVWriter(output)
 	defer writer.Close()
 
-	commands.ProcessPartnerStep2(readerPassport, writer, keyP, partnerEncMap, originalData)
+	commands.ProcessBobStep2(readerPassport, writer, keyB, bobEncMap, originalData)
 
 	writer.Close()
 	return output.String()

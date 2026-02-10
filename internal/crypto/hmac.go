@@ -4,7 +4,7 @@ import (
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
-	"encoding/base64"
+	"encoding/hex"
 )
 
 func GenerateHMACKey() ([]byte, error) {
@@ -20,7 +20,7 @@ func HMAC(key, data []byte) string {
 	h := hmac.New(sha256.New, key)
 	h.Write(data)
 	sum := h.Sum(nil)
-	return base64.StdEncoding.EncodeToString(sum)
+	return hex.EncodeToString(sum)
 }
 
 func HMACBytes(key, data []byte) []byte {

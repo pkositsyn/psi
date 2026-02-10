@@ -36,120 +36,180 @@ func newMemWriteCloser() *memWriteCloser {
 }
 
 func TestPSIBasicIntersection(t *testing.T) {
-	partnerData, err := os.ReadFile("testdata/partner_basic.tsv")
+	bobData, err := os.ReadFile("testdata/bob_basic.tsv")
 	if err != nil {
-		t.Fatalf("не удалось прочитать partner_basic.tsv: %v", err)
+		t.Fatalf("не удалось прочитать bob_basic.tsv: %v", err)
 	}
 
-	passportData, err := os.ReadFile("testdata/passport_basic.tsv")
+	aliceData, err := os.ReadFile("testdata/alice_basic.tsv")
 	if err != nil {
-		t.Fatalf("не удалось прочитать passport_basic.tsv: %v", err)
+		t.Fatalf("не удалось прочитать alice_basic.tsv: %v", err)
 	}
 
-	result := runPSIProtocol(t, string(partnerData), string(passportData))
+	result := runPSIProtocol(t, string(bobData), string(aliceData))
 
 	expectedMappings := map[string]string{
-		"puid_123": "user_001",
-		"puid_456": "user_004",
-		"puid_789": "user_003",
-		"puid_999": "",
+		"a_user_id_123": "b_user_001",
+		"a_user_id_456": "b_user_004",
+		"a_user_id_789": "b_user_003",
+		"a_user_id_999": "",
 	}
 
 	validateResult(t, result, expectedMappings)
 }
 
 func TestPSINoIntersection(t *testing.T) {
-	partnerData, err := os.ReadFile("testdata/partner_no_intersection.tsv")
+	bobData, err := os.ReadFile("testdata/bob_no_intersection.tsv")
 	if err != nil {
-		t.Fatalf("не удалось прочитать partner_no_intersection.tsv: %v", err)
+		t.Fatalf("не удалось прочитать bob_no_intersection.tsv: %v", err)
 	}
 
-	passportData, err := os.ReadFile("testdata/passport_no_intersection.tsv")
+	aliceData, err := os.ReadFile("testdata/alice_no_intersection.tsv")
 	if err != nil {
-		t.Fatalf("не удалось прочитать passport_no_intersection.tsv: %v", err)
+		t.Fatalf("не удалось прочитать alice_no_intersection.tsv: %v", err)
 	}
 
-	result := runPSIProtocol(t, string(partnerData), string(passportData))
+	result := runPSIProtocol(t, string(bobData), string(aliceData))
 
 	expectedMappings := map[string]string{
-		"puid_123": "",
-		"puid_456": "",
+		"a_user_id_123": "",
+		"a_user_id_456": "",
 	}
 
 	validateResult(t, result, expectedMappings)
 }
 
 func TestPSIFullIntersection(t *testing.T) {
-	partnerData, err := os.ReadFile("testdata/partner_full_intersection.tsv")
+	bobData, err := os.ReadFile("testdata/bob_full_intersection.tsv")
 	if err != nil {
-		t.Fatalf("не удалось прочитать partner_full_intersection.tsv: %v", err)
+		t.Fatalf("не удалось прочитать bob_full_intersection.tsv: %v", err)
 	}
 
-	passportData, err := os.ReadFile("testdata/passport_full_intersection.tsv")
+	aliceData, err := os.ReadFile("testdata/alice_full_intersection.tsv")
 	if err != nil {
-		t.Fatalf("не удалось прочитать passport_full_intersection.tsv: %v", err)
+		t.Fatalf("не удалось прочитать alice_full_intersection.tsv: %v", err)
 	}
 
-	result := runPSIProtocol(t, string(partnerData), string(passportData))
+	result := runPSIProtocol(t, string(bobData), string(aliceData))
 
 	expectedMappings := map[string]string{
-		"puid_123": "user_001",
-		"puid_456": "user_002",
+		"a_user_id_123": "b_user_001",
+		"a_user_id_456": "b_user_002",
 	}
 
 	validateResult(t, result, expectedMappings)
 }
 
-func runPSIProtocol(t *testing.T, partnerInput, passportInput string) string {
+func runPSIProtocol(t *testing.T, bobInput, aliceInput string) string {
 	keyK, err := crypto.GenerateHMACKey()
 	if err != nil {
 		t.Fatalf("ошибка генерации HMAC ключа: %v", err)
 	}
 
-	keyP, err := crypto.GenerateECDHKey()
+	keyB, err := crypto.GenerateECDHKey()
 	if err != nil {
-		t.Fatalf("ошибка генерации ECDH ключа P: %v", err)
+		t.Fatalf("ошибка генерации ECDH ключа B: %v", err)
 	}
 
-	partnerStep1Output := partnerStep1(keyK, keyP, partnerInput)
+	bobStep1Output := bobStep1(keyK, keyB, bobInput)
 
-	keyY, err := crypto.GenerateECDHKey()
+	keyA, err := crypto.GenerateECDHKey()
 	if err != nil {
-		t.Fatalf("ошибка генерации ECDH ключа Y: %v", err)
+		t.Fatalf("ошибка генерации ECDH ключа A: %v", err)
 	}
 
-	partnerEncryptedY, passportEncrypted := passportStep1(keyK, keyY, partnerStep1Output, passportInput)
+	bobEncryptedA, aliceEncrypted := aliceStep1(keyK, keyA, bobStep1Output, aliceInput)
 
-	partnerFinal := partnerStep2(keyP, partnerInput, passportEncrypted, partnerEncryptedY)
+	bobFinal := bobStep2(keyB, bobInput, aliceEncrypted, bobEncryptedA)
 
-	passportFinal := passportStep2Helper(passportEncrypted, partnerFinal)
+	aliceFinal := aliceStep2Helper(aliceEncrypted, bobFinal)
 
-	return passportFinal
+	return aliceFinal
 }
 
-func passportStep2Helper(passportEncrypted, partnerFinal string) string {
-	readerPartner := psio.NewTSVReader(newMemReadCloser(partnerFinal))
-	defer readerPartner.Close()
-	partnerData, _ := commands.LoadPartnerFinalData(readerPartner)
-
-	readerPassport := psio.NewTSVReader(newMemReadCloser(passportEncrypted))
-	defer readerPassport.Close()
+func bobStep1(keyK []byte, keyB *crypto.ECDHKey, input string) string {
+	reader := psio.NewTSVReader(newMemReadCloser(input))
+	defer reader.Close()
 
 	output := newMemWriteCloser()
 	writer := psio.NewTSVWriter(output)
 	defer writer.Close()
 
-	commands.ProcessPassportStep2(readerPassport, writer, partnerData)
+	commands.ProcessBobStep1(reader, writer, keyK, keyB)
+
+	writer.Close()
+	return output.String()
+}
+
+func aliceStep1(keyK []byte, keyA *crypto.ECDHKey, bobEncrypted, aliceInput string) (string, string) {
+	readerBob := psio.NewTSVReader(newMemReadCloser(bobEncrypted))
+	defer readerBob.Close()
+
+	outputBob := newMemWriteCloser()
+	writerBob := psio.NewTSVWriter(outputBob)
+	defer writerBob.Close()
+
+	commands.ProcessBobDataStep1(readerBob, writerBob, keyA)
+	writerBob.Close()
+
+	readerAlice := psio.NewTSVReader(newMemReadCloser(aliceInput))
+	defer readerAlice.Close()
+
+	outputAlice := newMemWriteCloser()
+	writerAlice := psio.NewTSVWriter(outputAlice)
+	defer writerAlice.Close()
+
+	commands.ProcessAliceDataStep1(readerAlice, writerAlice, keyK, keyA)
+	writerAlice.Close()
+
+	return outputBob.String(), outputAlice.String()
+}
+
+func bobStep2(keyB *crypto.ECDHKey, originalInput, aliceEncrypted, bobEncryptedA string) string {
+	readerBobEnc := psio.NewTSVReader(newMemReadCloser(bobEncryptedA))
+	defer readerBobEnc.Close()
+	bobEncMap, _ := commands.LoadIndexedData(readerBobEnc)
+
+	readerOriginal := psio.NewTSVReader(newMemReadCloser(originalInput))
+	defer readerOriginal.Close()
+	originalData, _ := commands.LoadOriginalData(readerOriginal)
+
+	readerAlice := psio.NewTSVReader(newMemReadCloser(aliceEncrypted))
+	defer readerAlice.Close()
+
+	output := newMemWriteCloser()
+	writer := psio.NewTSVWriter(output)
+	defer writer.Close()
+
+	commands.ProcessBobStep2(readerAlice, writer, keyB, bobEncMap, originalData)
+
+	writer.Close()
+	return output.String()
+}
+
+func aliceStep2Helper(aliceEncrypted, bobFinal string) string {
+	readerBob := psio.NewTSVReader(newMemReadCloser(bobFinal))
+	defer readerBob.Close()
+	bobData, _ := commands.LoadBobFinalData(readerBob)
+
+	readerAlice := psio.NewTSVReader(newMemReadCloser(aliceEncrypted))
+	defer readerAlice.Close()
+
+	output := newMemWriteCloser()
+	writer := psio.NewTSVWriter(output)
+	defer writer.Close()
+
+	commands.ProcessAliceStep2(readerAlice, writer, bobData)
 
 	writer.Close()
 	return output.String()
 }
 
 func TestPSIInvalidPhoneFormat(t *testing.T) {
-	invalidPartnerData := "79991234567\tuser_001\n+79991234568\tuser_002\n"
+	invalidPartnerData := "79991234567\tb_user_001\n+79991234568\tb_user_002\n"
 
 	keyK, _ := crypto.GenerateHMACKey()
-	keyP, _ := crypto.GenerateECDHKey()
+	keyB, _ := crypto.GenerateECDHKey()
 
 	reader := psio.NewTSVReader(newMemReadCloser(invalidPartnerData))
 	defer reader.Close()
@@ -158,7 +218,7 @@ func TestPSIInvalidPhoneFormat(t *testing.T) {
 	writer := psio.NewTSVWriter(output)
 	defer writer.Close()
 
-	_, err := commands.ProcessPartnerStep1(reader, writer, keyK, keyP)
+	_, err := commands.ProcessBobStep1(reader, writer, keyK, keyB)
 	if err == nil {
 		t.Fatal("ожидалась ошибка валидации телефона, но её не было")
 	}
@@ -185,24 +245,24 @@ func validateResult(t *testing.T, result string, expected map[string]string) {
 			t.Fatalf("неверный формат результата")
 		}
 
-		puid := record[0]
-		userID := record[1]
-		actual[puid] = userID
+		a_user_id := record[0]
+		bUserID := record[1]
+		actual[a_user_id] = bUserID
 	}
 
 	if len(actual) != len(expected) {
 		t.Errorf("неверное количество записей: ожидается %d, получено %d", len(expected), len(actual))
 	}
 
-	for puid, expectedUserID := range expected {
-		actualUserID, found := actual[puid]
+	for a_user_id, expectedUserID := range expected {
+		actualUserID, found := actual[a_user_id]
 		if !found {
-			t.Errorf("puid %s не найден в результате", puid)
+			t.Errorf("a_user_id %s не найден в результате", a_user_id)
 			continue
 		}
 
 		if actualUserID != expectedUserID {
-			t.Errorf("для puid %s ожидается user_id %q, получено %q", puid, expectedUserID, actualUserID)
+			t.Errorf("для a_user_id %s ожидается b_user_id %q, получено %q", a_user_id, expectedUserID, actualUserID)
 		}
 	}
 }

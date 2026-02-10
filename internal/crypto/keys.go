@@ -1,14 +1,14 @@
 package crypto
 
 import (
-	"encoding/base64"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"strings"
 )
 
 func SaveHMACKey(filename string, hmacKey []byte) error {
-	encoded := base64.StdEncoding.EncodeToString(hmacKey)
+	encoded := hex.EncodeToString(hmacKey)
 	return os.WriteFile(filename, []byte(encoded), 0600)
 }
 
@@ -19,7 +19,7 @@ func LoadHMACKey(filename string) ([]byte, error) {
 	}
 
 	encoded := strings.TrimSpace(string(data))
-	hmacKey, err := base64.StdEncoding.DecodeString(encoded)
+	hmacKey, err := hex.DecodeString(encoded)
 	if err != nil {
 		return nil, fmt.Errorf("ошибка декодирования HMAC ключа: %w", err)
 	}
@@ -28,7 +28,7 @@ func LoadHMACKey(filename string) ([]byte, error) {
 }
 
 func SaveECDHKey(filename string, ecdhKey *ECDHKey) error {
-	encoded := base64.StdEncoding.EncodeToString(ecdhKey.Bytes())
+	encoded := hex.EncodeToString(ecdhKey.Bytes())
 	return os.WriteFile(filename, []byte(encoded), 0600)
 }
 
@@ -39,7 +39,7 @@ func LoadECDHKey(filename string) (*ECDHKey, error) {
 	}
 
 	encoded := strings.TrimSpace(string(data))
-	keyBytes, err := base64.StdEncoding.DecodeString(encoded)
+	keyBytes, err := hex.DecodeString(encoded)
 	if err != nil {
 		return nil, fmt.Errorf("ошибка декодирования ECDH ключа: %w", err)
 	}

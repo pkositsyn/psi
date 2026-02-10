@@ -16,10 +16,10 @@ var rootCmd = &cobra.Command{
 }
 
 func init() {
-	rootCmd.AddCommand(commands.PartnerStep1Cmd)
-	rootCmd.AddCommand(commands.PartnerStep2Cmd)
-	rootCmd.AddCommand(commands.PassportStep1Cmd)
-	rootCmd.AddCommand(commands.PassportStep2Cmd)
+	rootCmd.AddCommand(commands.BobStep1Cmd)
+	rootCmd.AddCommand(commands.BobStep2Cmd)
+	rootCmd.AddCommand(commands.AliceStep1Cmd)
+	rootCmd.AddCommand(commands.AliceStep2Cmd)
 	rootCmd.AddCommand(commands.ValidateCmd)
 }
 

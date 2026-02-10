@@ -1,7 +1,7 @@
 package crypto
 
 import (
-	"encoding/base64"
+	"encoding/hex"
 	"testing"
 )
 
@@ -43,10 +43,9 @@ func TestECDHApply(t *testing.T) {
 		t.Fatalf("ошибка применения ключа P: %v", err)
 	}
 
-	// Проверяем валидность base64
-	_, err = base64.StdEncoding.DecodeString(encP)
+	_, err = hex.DecodeString(encP)
 	if err != nil {
-		t.Errorf("результат не является валидным base64: %v", err)
+		t.Errorf("результат не является валидным hex: %v", err)
 	}
 
 	// Применяем ключ Y: H(phone)^P^Y

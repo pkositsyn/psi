@@ -4,7 +4,7 @@ import (
 	"crypto/ecdh"
 	"crypto/elliptic"
 	"crypto/rand"
-	"encoding/base64"
+	"encoding/hex"
 	"fmt"
 	"math/big"
 )
@@ -26,9 +26,9 @@ func GenerateECDHKey() (*ECDHKey, error) {
 }
 
 func ECDHApply(key *ECDHKey, data string) (string, error) {
-	inputBytes, err := base64.StdEncoding.DecodeString(data)
+	inputBytes, err := hex.DecodeString(data)
 	if err != nil {
-		return "", fmt.Errorf("ошибка декодирования base64: %w", err)
+		return "", fmt.Errorf("ошибка декодирования hex: %w", err)
 	}
 
 	curve := elliptic.P256()
@@ -49,7 +49,7 @@ func ECDHApply(key *ECDHKey, data string) (string, error) {
 
 	rx, ry := curve.ScalarMult(x, y, key.privateKey.Bytes())
 
-	return base64.StdEncoding.EncodeToString(elliptic.Marshal(curve, rx, ry)), nil
+	return hex.EncodeToString(elliptic.Marshal(curve, rx, ry)), nil
 }
 
 func (k *ECDHKey) Bytes() []byte {
