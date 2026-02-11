@@ -259,8 +259,8 @@ func ProcessAliceDataStep1(reader *io.TSVReader, writer *io.TSVWriter, keyK []by
 			if writeErr == nil {
 				if err := writer.Write([]string{
 					fmt.Sprintf("%d", result.Value.index),
-					result.Value.aUserId,
 					result.Value.encrypted,
+					result.Value.aUserId,
 				}); err != nil {
 					writeErr = err
 				}

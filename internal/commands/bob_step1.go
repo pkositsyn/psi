@@ -134,9 +134,7 @@ func ProcessBobStep1(reader *io.TSVReader, writer *io.TSVWriter, keyK []byte, ke
 	var writeErr error
 	var wg sync.WaitGroup
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		for result := range pool.Results() {
 			if result.Error != nil {
 				if writeErr == nil {
@@ -153,7 +151,7 @@ func ProcessBobStep1(reader *io.TSVReader, writer *io.TSVWriter, keyK []byte, ke
 				}
 			}
 		}
-	}()
+	})
 
 	count := 0
 	batch := make([]bobStep1Task, 0, batchSize)
