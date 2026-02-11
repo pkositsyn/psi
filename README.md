@@ -96,7 +96,7 @@ psi alice-step1
 **Выходные данные:**
 - `alice_ecdh_key.txt` - ключ A для ECDH (приватный, не передавать!)
 - `bob_encrypted_a.tsv.gz` - файл: `index \t H(phone_b)^B^A`
-- `alice_encrypted.tsv.gz` - файл: `index \t a_user_id \t H(phone_a)^A`
+- `alice_encrypted.tsv.gz` - файл: `index \t H(phone_a)^A \t a_user_id`
 
 **Передать Bob:**
 - `bob_encrypted_a.tsv.gz`
