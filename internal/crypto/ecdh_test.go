@@ -35,7 +35,7 @@ func TestECDHApply(t *testing.T) {
 	// Создаем тестовые данные (HMAC хеш телефона)
 	hmacKey := []byte("test-hmac-key-32-bytes-padding!!")
 	phone := "+79001234567"
-	hashed := HMAC(hmacKey, []byte(phone))
+	hashed := HMAC(nil, hmacKey, []byte(phone))
 
 	// Применяем ключ P: H(phone)^P
 	encP, err := ECDHApply(keyP, hashed)
@@ -81,7 +81,7 @@ func TestECDHCommutativity(t *testing.T) {
 
 	hmacKey := []byte("test-hmac-key-32-bytes-padding!!")
 	phone := "+79001234567"
-	hashed := HMAC(hmacKey, []byte(phone))
+	hashed := HMAC(nil, hmacKey, []byte(phone))
 
 	// Путь 1: H -> H^P -> H^P^Y
 	encP, err := ECDHApply(keyP, hashed)

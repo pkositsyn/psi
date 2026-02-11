@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/pkositsyn/psi/internal/commands"
+	"github.com/pkositsyn/psi/internal/maxprocs"
 	"github.com/spf13/cobra"
 )
 
@@ -24,6 +25,9 @@ func init() {
 }
 
 func Execute() {
+	// Save some CPU for background work
+	maxprocs.Adjust()
+
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

@@ -5,6 +5,8 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
+	"hash"
+	"sync"
 )
 
 func GenerateHMACKey() ([]byte, error) {
@@ -16,15 +18,18 @@ func GenerateHMACKey() ([]byte, error) {
 	return key, nil
 }
 
-func HMAC(key, data []byte) string {
-	h := hmac.New(sha256.New, key)
+func HMAC(p *sync.Pool, key, data []byte) string {
+	var h hash.Hash
+	if p == nil {
+		h = hmac.New(sha256.New, key)
+	} else {
+		h = p.Get().(hash.Hash)
+	}
 	h.Write(data)
 	sum := h.Sum(nil)
+	if p != nil {
+		h.Reset()
+		p.Put(h)
+	}
 	return hex.EncodeToString(sum)
-}
-
-func HMACBytes(key, data []byte) []byte {
-	h := hmac.New(sha256.New, key)
-	h.Write(data)
-	return h.Sum(nil)
 }
