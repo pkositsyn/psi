@@ -104,7 +104,7 @@ func ProcessAliceStep2(reader *io.TSVReader, writer *io.TSVWriter, bobData map[s
 		}
 
 		index := record[0]
-		aUserId := record[1]
+		aUserId := record[2]
 
 		if br, found := bobData[index]; found && br.UserID != "" {
 			matched++
