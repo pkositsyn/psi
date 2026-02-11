@@ -56,7 +56,6 @@ func TestPSIBasicIntersection(t *testing.T) {
 		"a_user_id_123": "b_user_001",
 		"a_user_id_456": "b_user_004",
 		"a_user_id_789": "b_user_003",
-		"a_user_id_999": "",
 	}
 
 	validateResult(t, result, expectedMappings)
@@ -75,10 +74,7 @@ func TestPSINoIntersection(t *testing.T) {
 
 	result := runPSIProtocol(t, string(bobData), string(aliceData))
 
-	expectedMappings := map[string]string{
-		"a_user_id_123": "",
-		"a_user_id_456": "",
-	}
+	expectedMappings := map[string]string{}
 
 	validateResult(t, result, expectedMappings)
 }

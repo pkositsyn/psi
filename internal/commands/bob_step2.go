@@ -205,7 +205,7 @@ func ProcessBobStep2(reader *io.TSVReader, writer *io.TSVWriter, keyB *crypto.EC
 			return count, matchedCount, err
 		}
 
-		if len(record) < 3 {
+		if len(record) < 2 {
 			pool.Close()
 			wg.Wait()
 			return count, matchedCount, fmt.Errorf("неверный формат записи")
@@ -213,7 +213,7 @@ func ProcessBobStep2(reader *io.TSVReader, writer *io.TSVWriter, keyB *crypto.EC
 
 		batch = append(batch, bobStep2Task{
 			index:      record[0],
-			encryptedA: record[2],
+			encryptedA: record[1],
 		})
 		count++
 
