@@ -26,7 +26,7 @@ var (
 func init() {
 	AliceStep2Cmd.Flags().StringVar(&aliceStep2InputOriginal, "in-original", "alice_encrypted.tsv.gz", "Файл a_user_id <-> H(phone_a)^A из step1")
 	AliceStep2Cmd.Flags().StringVar(&aliceStep2InputBob, "in-bob", "bob_final.tsv.gz", "Файл b_user_id <-> H(phone_a)^A^B от bob")
-	AliceStep2Cmd.Flags().StringVar(&aliceStep2Output, "output", "alice_final.tsv.gz", "Выходной файл a_user_id <-> b_user_id")
+	AliceStep2Cmd.Flags().StringVar(&aliceStep2Output, "output", "alice_final.tsv", "Выходной файл a_user_id <-> b_user_id")
 }
 
 func runAliceStep2(cmd *cobra.Command, args []string) error {
@@ -104,16 +104,14 @@ func ProcessAliceStep2(reader *io.TSVReader, writer *io.TSVWriter, bobData map[s
 		}
 
 		index := record[0]
-		a_user_id := record[1]
+		aUserId := record[1]
 
-		var bUserID string
 		if br, found := bobData[index]; found && br.UserID != "" {
-			bUserID = br.UserID
 			matched++
-		}
 
-		if err := writer.Write([]string{a_user_id, bUserID}); err != nil {
-			return count, matched, err
+			if err := writer.Write([]string{aUserId, br.UserID}); err != nil {
+				return count, matched, err
+			}
 		}
 
 		count++

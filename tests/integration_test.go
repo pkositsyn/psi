@@ -139,7 +139,7 @@ func bobStep1(keyK []byte, keyB *crypto.ECDHKey, input string) string {
 	writer := psio.NewTSVWriter(output)
 	defer writer.Close()
 
-	commands.ProcessBobStep1(reader, writer, keyK, keyB)
+	commands.ProcessBobStep1(reader, writer, keyK, keyB, 128)
 
 	writer.Close()
 	return output.String()
@@ -153,7 +153,7 @@ func aliceStep1(keyK []byte, keyA *crypto.ECDHKey, bobEncrypted, aliceInput stri
 	writerBob := psio.NewTSVWriter(outputBob)
 	defer writerBob.Close()
 
-	commands.ProcessBobDataStep1(readerBob, writerBob, keyA)
+	commands.ProcessBobDataStep1(readerBob, writerBob, keyA, 128)
 	writerBob.Close()
 
 	readerAlice := psio.NewTSVReader(newMemReadCloser(aliceInput))
@@ -163,7 +163,7 @@ func aliceStep1(keyK []byte, keyA *crypto.ECDHKey, bobEncrypted, aliceInput stri
 	writerAlice := psio.NewTSVWriter(outputAlice)
 	defer writerAlice.Close()
 
-	commands.ProcessAliceDataStep1(readerAlice, writerAlice, keyK, keyA)
+	commands.ProcessAliceDataStep1(readerAlice, writerAlice, keyK, keyA, 128)
 	writerAlice.Close()
 
 	return outputBob.String(), outputAlice.String()
@@ -185,7 +185,7 @@ func bobStep2(keyB *crypto.ECDHKey, originalInput, aliceEncrypted, bobEncryptedA
 	writer := psio.NewTSVWriter(output)
 	defer writer.Close()
 
-	commands.ProcessBobStep2(readerAlice, writer, keyB, bobEncMap, originalData)
+	commands.ProcessBobStep2(readerAlice, writer, keyB, bobEncMap, originalData, 128)
 
 	writer.Close()
 	return output.String()
@@ -222,7 +222,7 @@ func TestPSIInvalidPhoneFormat(t *testing.T) {
 	writer := psio.NewTSVWriter(output)
 	defer writer.Close()
 
-	_, err := commands.ProcessBobStep1(reader, writer, keyK, keyB)
+	_, err := commands.ProcessBobStep1(reader, writer, keyK, keyB, 512)
 	if err == nil {
 		t.Fatal("ожидалась ошибка валидации телефона, но её не было")
 	}
@@ -249,24 +249,24 @@ func validateResult(t *testing.T, result string, expected map[string]string) {
 			t.Fatalf("неверный формат результата")
 		}
 
-		a_user_id := record[0]
+		aUserID := record[0]
 		bUserID := record[1]
-		actual[a_user_id] = bUserID
+		actual[aUserID] = bUserID
 	}
 
 	if len(actual) != len(expected) {
 		t.Errorf("неверное количество записей: ожидается %d, получено %d", len(expected), len(actual))
 	}
 
-	for a_user_id, expectedUserID := range expected {
-		actualUserID, found := actual[a_user_id]
+	for aUserID, expectedUserID := range expected {
+		actualUserID, found := actual[aUserID]
 		if !found {
-			t.Errorf("a_user_id %s не найден в результате", a_user_id)
+			t.Errorf("a_user_id %s не найден в результате", aUserID)
 			continue
 		}
 
 		if actualUserID != expectedUserID {
-			t.Errorf("для a_user_id %s ожидается b_user_id %q, получено %q", a_user_id, expectedUserID, actualUserID)
+			t.Errorf("для a_user_id %s ожидается b_user_id %q, получено %q", aUserID, expectedUserID, actualUserID)
 		}
 	}
 }

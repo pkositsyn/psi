@@ -42,6 +42,10 @@ func BenchmarkBobStep1_10000(b *testing.B) {
 	benchmarkBobStep1(b, 10000)
 }
 
+func BenchmarkBobStep1_100000(b *testing.B) {
+	benchmarkBobStep1(b, 100000)
+}
+
 func benchmarkBobStep1(b *testing.B, n int) {
 	input := generateBobData(n)
 	keyK, _ := crypto.GenerateHMACKey()
@@ -53,7 +57,7 @@ func benchmarkBobStep1(b *testing.B, n int) {
 		output := newMemWriteCloser()
 		writer := psio.NewTSVWriter(output)
 
-		commands.ProcessBobStep1(reader, writer, keyK, keyB)
+		commands.ProcessBobStep1(reader, writer, keyK, keyB, 128)
 
 		writer.Close()
 		reader.Close()
@@ -87,7 +91,7 @@ func benchmarkAliceStep1Bob(b *testing.B, n int) {
 		outputPartner := newMemWriteCloser()
 		writerPartner := psio.NewTSVWriter(outputPartner)
 
-		commands.ProcessBobDataStep1(readerPartner, writerPartner, keyA)
+		commands.ProcessBobDataStep1(readerPartner, writerPartner, keyA, 128)
 
 		writerPartner.Close()
 		readerPartner.Close()
@@ -118,7 +122,7 @@ func benchmarkAliceStep1Alice(b *testing.B, n int) {
 		outputPassport := newMemWriteCloser()
 		writerPassport := psio.NewTSVWriter(outputPassport)
 
-		commands.ProcessAliceDataStep1(readerPassport, writerPassport, keyK, keyA)
+		commands.ProcessAliceDataStep1(readerPassport, writerPassport, keyK, keyA, 128)
 
 		writerPassport.Close()
 		readerPassport.Close()
@@ -135,6 +139,10 @@ func BenchmarkBobStep2_1000(b *testing.B) {
 
 func BenchmarkBobStep2_10000(b *testing.B) {
 	benchmarkBobStep2(b, 10000)
+}
+
+func BenchmarkBobStep2_100000(b *testing.B) {
+	benchmarkBobStep2(b, 100000)
 }
 
 func benchmarkBobStep2(b *testing.B, n int) {
@@ -162,7 +170,7 @@ func benchmarkBobStep2(b *testing.B, n int) {
 		output := newMemWriteCloser()
 		writer := psio.NewTSVWriter(output)
 
-		commands.ProcessBobStep2(readerPassport, writer, keyB, bobEncMap, originalData)
+		commands.ProcessBobStep2(readerPassport, writer, keyB, bobEncMap, originalData, 128)
 
 		writer.Close()
 		readerPassport.Close()
@@ -218,7 +226,7 @@ func partnerStep1(keyK []byte, keyB *crypto.ECDHKey, input string) string {
 	writer := psio.NewTSVWriter(output)
 	defer writer.Close()
 
-	commands.ProcessBobStep1(reader, writer, keyK, keyB)
+	commands.ProcessBobStep1(reader, writer, keyK, keyB, 512)
 
 	writer.Close()
 	return output.String()
@@ -232,7 +240,7 @@ func passportStep1(keyK []byte, keyA *crypto.ECDHKey, bobEncrypted, aliceInput s
 	writerPartner := psio.NewTSVWriter(outputPartner)
 	defer writerPartner.Close()
 
-	commands.ProcessBobDataStep1(readerPartner, writerPartner, keyA)
+	commands.ProcessBobDataStep1(readerPartner, writerPartner, keyA, 128)
 	writerPartner.Close()
 
 	readerPassport := psio.NewTSVReader(newMemReadCloser(aliceInput))
@@ -242,7 +250,7 @@ func passportStep1(keyK []byte, keyA *crypto.ECDHKey, bobEncrypted, aliceInput s
 	writerPassport := psio.NewTSVWriter(outputPassport)
 	defer writerPassport.Close()
 
-	commands.ProcessAliceDataStep1(readerPassport, writerPassport, keyK, keyA)
+	commands.ProcessAliceDataStep1(readerPassport, writerPassport, keyK, keyA, 128)
 	writerPassport.Close()
 
 	return outputPartner.String(), outputPassport.String()
@@ -264,7 +272,7 @@ func partnerStep2(keyB *crypto.ECDHKey, originalInput, aliceEncrypted, bobEncryp
 	writer := psio.NewTSVWriter(output)
 	defer writer.Close()
 
-	commands.ProcessBobStep2(readerPassport, writer, keyB, bobEncMap, originalData)
+	commands.ProcessBobStep2(readerPassport, writer, keyB, bobEncMap, originalData, 512)
 
 	writer.Close()
 	return output.String()

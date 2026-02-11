@@ -2,6 +2,8 @@ package commands
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
 	"fmt"
 	"os"
 	"sync"
@@ -10,6 +12,7 @@ import (
 	"github.com/pkositsyn/psi/internal/io"
 	"github.com/pkositsyn/psi/internal/progress"
 	"github.com/pkositsyn/psi/internal/validation"
+	"github.com/pkositsyn/psi/internal/workerpool"
 	"github.com/spf13/cobra"
 )
 
@@ -24,6 +27,7 @@ var (
 	bobStep1OutHMACKey string
 	bobStep1OutECDHKey string
 	bobStep1OutEnc     string
+	bobStep1BatchSize  int
 )
 
 func init() {
@@ -31,6 +35,7 @@ func init() {
 	BobStep1Cmd.Flags().StringVar(&bobStep1OutHMACKey, "out-hmac-key", "bob_hmac_key.txt", "Выходной файл с HMAC ключом K (для передачи)")
 	BobStep1Cmd.Flags().StringVar(&bobStep1OutECDHKey, "out-ecdh-key", "bob_ecdh_key.txt", "Выходной файл с ECDH ключом B (приватный)")
 	BobStep1Cmd.Flags().StringVarP(&bobStep1OutEnc, "out-encrypted", "e", "bob_encrypted.tsv.gz", "Выходной файл с index и H(phone)^B (для передачи)")
+	BobStep1Cmd.Flags().IntVar(&bobStep1BatchSize, "batch-size", 128, "Размер батча для параллельной обработки")
 }
 
 func runBobStep1(cmd *cobra.Command, args []string) error {
@@ -69,7 +74,7 @@ func runBobStep1(cmd *cobra.Command, args []string) error {
 	var wg sync.WaitGroup
 	progress.TrackProgress(ctx, &wg, "Прогресс обработки", reader)
 
-	count, err := ProcessBobStep1(reader, writer, keyK, keyB)
+	count, err := ProcessBobStep1(reader, writer, keyK, keyB, bobStep1BatchSize)
 	if err != nil {
 		return err
 	}
@@ -89,42 +94,108 @@ func runBobStep1(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func ProcessBobStep1(reader *io.TSVReader, writer *io.TSVWriter, keyK []byte, keyB *crypto.ECDHKey) (int, error) {
+type bobStep1Task struct {
+	index int
+	phone string
+}
+
+type bobStep1Result struct {
+	index     int
+	encrypted string
+}
+
+func ProcessBobStep1(reader *io.TSVReader, writer *io.TSVWriter, keyK []byte, keyB *crypto.ECDHKey, batchSize int) (int, error) {
+	hmacPool := &sync.Pool{
+		New: func() any {
+			return hmac.New(sha256.New, keyK)
+		},
+	}
+
+	handler := func(task bobStep1Task) (bobStep1Result, error) {
+		if err := validation.ValidateE164Phone(task.phone); err != nil {
+			return bobStep1Result{}, fmt.Errorf("строка %d: %w", task.index, err)
+		}
+
+		hashed := crypto.HMAC(hmacPool, keyK, []byte(task.phone))
+
+		encrypted, err := crypto.ECDHApply(keyB, hashed)
+		if err != nil {
+			return bobStep1Result{}, fmt.Errorf("ошибка ECDH шифрования: %w", err)
+		}
+
+		return bobStep1Result{
+			index:     task.index,
+			encrypted: encrypted,
+		}, nil
+	}
+
+	pool := workerpool.New(handler)
+
+	var writeErr error
+	var wg sync.WaitGroup
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for result := range pool.Results() {
+			if result.Error != nil {
+				if writeErr == nil {
+					writeErr = result.Error
+				}
+				continue
+			}
+			if writeErr == nil {
+				if err := writer.Write([]string{
+					fmt.Sprintf("%d", result.Value.index),
+					result.Value.encrypted,
+				}); err != nil {
+					writeErr = fmt.Errorf("ошибка записи: %w", err)
+				}
+			}
+		}
+	}()
+
 	count := 0
+	batch := make([]bobStep1Task, 0, batchSize)
+
 	for {
 		record, err := reader.Read()
 		if err == io.EOF {
 			break
 		}
 		if err != nil {
+			pool.Close()
+			wg.Wait()
 			return count, fmt.Errorf("ошибка чтения записи: %w", err)
 		}
 
 		if len(record) != 2 {
+			pool.Close()
+			wg.Wait()
 			return count, fmt.Errorf("неверный формат записи: ожидается 2 поля, получено %d", len(record))
 		}
 
-		phone := record[0]
-
-		if err := validation.ValidateE164Phone(phone); err != nil {
-			return count, fmt.Errorf("строка %d: %w", count, err)
-		}
-
-		hashed := crypto.HMAC(keyK, []byte(phone))
-
-		encrypted, err := crypto.ECDHApply(keyB, hashed)
-		if err != nil {
-			return count, fmt.Errorf("ошибка ECDH шифрования: %w", err)
-		}
-
-		if err := writer.Write([]string{
-			fmt.Sprintf("%d", count),
-			encrypted,
-		}); err != nil {
-			return count, fmt.Errorf("ошибка записи: %w", err)
-		}
-
+		batch = append(batch, bobStep1Task{
+			index: count,
+			phone: record[0],
+		})
 		count++
+
+		if len(batch) >= batchSize {
+			pool.Add(batch)
+			batch = make([]bobStep1Task, 0, batchSize)
+		}
+	}
+
+	if len(batch) > 0 {
+		pool.Add(batch)
+	}
+
+	pool.Close()
+	wg.Wait()
+
+	if writeErr != nil {
+		return count, writeErr
 	}
 
 	return count, nil

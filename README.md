@@ -138,7 +138,7 @@ psi alice-step2
 ```
 
 **Выходные данные:**
-- `alice_final.tsv.gz` - финальный маппинг: `a_user_id \t b_user_id`
+- `alice_final.tsv` - финальный маппинг: `a_user_id \t b_user_id`
   - `b_user_id` пустой для записей без пересечения
 
 ---
@@ -182,7 +182,7 @@ psi bob-step2
 psi alice-step2
 ```
 
-Результат: `alice_final.tsv.gz` содержит маппинг a_user_id <-> b_user_id для пересечения телефонов.
+Результат: `alice_final.tsv` содержит маппинг a_user_id <-> b_user_id для пересечения телефонов.
 
 ## Лицензия
 
